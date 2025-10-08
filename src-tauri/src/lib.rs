@@ -90,6 +90,30 @@ impl From<Card> for CardDto {
 use chrono::Utc;
 use diesel::prelude::*;
 use models::{Card, NewCard};
+use once_cell::sync::Lazy;
+use reader::{Reader, ReaderError};
+use reader::pn532::Pn532Reader;
+use std::sync::Mutex;
+use std::time::Duration;
+
+static ACTIVE_READER: Lazy<Mutex<Option<Box<dyn Reader>>>> = Lazy::new(|| Mutex::new(None));
+
+fn read_from_reader(timeout: Duration) -> Result<Vec<u8>, ReaderError> {
+    let mut guard = ACTIVE_READER
+        .lock()
+        .map_err(|_| ReaderError::Device("Reader mutex poisoned".into()))?;
+
+    if guard.is_none() {
+        let mut reader = Pn532Reader::with_default_path()?;
+        reader.init()?;
+        *guard = Some(Box::new(reader));
+    }
+
+    let reader = guard
+        .as_mut()
+        .ok_or_else(|| ReaderError::Initialization("Reader not available".into()))?;
+    reader.read_uid(timeout)
+}
 
 
 #[tauri::command]
@@ -150,6 +174,7 @@ fn register_leave(card_uid: String, leave_type: String) -> Result<String, String
     Ok(format!("Leave '{}' registered for card {}", leave_type, card_uid))
 }
 pub mod models;
+pub mod reader;
 pub mod schema;
 
 use app_dirs2::*;
@@ -190,8 +215,16 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 fn read_card_uid(_timeout: Option<i32>, is_leave: Option<bool>, uid: Option<Vec<u8>>, leave_type: Option<String>) -> Result<Vec<u8>, String> {
-    let uid = uid.unwrap_or_else(|| vec![0xAB, 0xBA, 0xDE, 0xDA]);
-    let uid_hex = uid.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(":");
+    let resolved_uid = match uid {
+        Some(mock) => mock,
+        None => {
+            let timeout = _timeout
+                .and_then(|t| if t > 0 { Some(t as u64) } else { None })
+                .unwrap_or(15);
+            read_from_reader(Duration::from_secs(timeout)).map_err(|e| e.to_string())?
+        }
+    };
+    let uid_hex = resolved_uid.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(":");
     println!("read_card_uid called with UID: {}", uid_hex);
     use crate::schema::cards::dsl::*;
     use crate::schema::punches::dsl as punches_dsl;
@@ -241,7 +274,7 @@ fn read_card_uid(_timeout: Option<i32>, is_leave: Option<bool>, uid: Option<Vec<
             }
         }
     }
-    Ok(uid)
+    Ok(resolved_uid)
 }
 
 #[tauri::command]

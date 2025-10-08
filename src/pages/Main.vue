@@ -72,18 +72,17 @@ async function scanCard() {
   isLoading.value = true;
   try {
     const isLeave = !!pendingLeaveType.value;
-    let uid: number[] | undefined = undefined;
-    let leaveType = pendingLeaveType.value || null;
+    const leaveType = pendingLeaveType.value || null;
+    const args: Record<string, unknown> = { timeout: 10, isLeave, leaveType };
     if (selectedTestUid.value) {
-      uid = await invoke("read_card_uid", { timeout: 10, isLeave, uid: selectedTestUid.value, leaveType });
-    } else {
+      args.uid = selectedTestUid.value;
+    }
+    const uid = await invoke("read_card_uid", args) as number[] | null;
+    if (!uid || uid.length === 0) {
       isLoading.value = false;
       return;
     }
-    if (!uid) {
-      isLoading.value = false;
-      return;
-    }
+    selectedTestUid.value = null;
     const uidHex = uid.map((b) => b.toString(16).padStart(2, "0")).join(":");
     card_uid.value = uidHex;
     const userData = await invoke("find_or_create_user", { cardUid: uidHex, userFullname: null }) as { card_name?: string, user_fullname?: string, card_number?: string };
@@ -192,7 +191,10 @@ const getCardButtonClass = (uid: number[], idx: number) => {
         {{ $t('User:') }} <span class="font-bold">{{ user.card_name + ' ' + user.user_fullname || user.card_number }}</span>
       </div>
       <div v-if="leaveResult" class="col-span-6 text-green-400 text-center mt-2">
-        {{ selectedTestUidHex + ' ' + leaveResult }}
+        <template v-if="selectedTestUidHex">
+          {{ selectedTestUidHex }}
+        </template>
+        {{ selectedTestUidHex ? ' ' : '' }}{{ leaveResult }}
       </div>
       <div v-if="errorMsg" class="col-span-6 text-red-400 text-center mt-2">
         {{ $t('Error:') }} {{ errorMsg }}
