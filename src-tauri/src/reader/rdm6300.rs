@@ -1,16 +1,20 @@
-use reader::{Reader, ReaderType};
+use std::time::Duration;
 
-pub struct RDM6300 {}
+use super::{Reader, ReaderError, ReaderType};
 
-impl Reader for RDM6300 {
-    fn init(&mut self) -> Result<(), Box<dyn Error>> {
-        // Initialization logic for RDM6300
-        Ok(())
+pub struct Rdm6300;
+
+impl Reader for Rdm6300 {
+    fn init(&mut self) -> Result<(), ReaderError> {
+        Err(ReaderError::Initialization(
+            "RDM6300 reader is not implemented".into(),
+        ))
     }
 
-    fn read_uid(&mut self, timeout: i32) -> Result<Vec<u8>, Box<dyn Error>> {
-        // Logic to read UID from RDM6300
-        Ok(vec![0x00, 0x01, 0x02, 0x03]) // Example UID
+    fn read_uid(&mut self, _timeout: Duration) -> Result<Vec<u8>, ReaderError> {
+        Err(ReaderError::Device(
+            "RDM6300 reader is not available in this build".into(),
+        ))
     }
 
     fn get_reader_type(&self) -> ReaderType {
